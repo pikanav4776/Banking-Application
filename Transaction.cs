@@ -2,11 +2,11 @@ namespace Transactions
 {
     public class Transaction
     {
-        public int id { get; set; }
-        public string Name { get; set; }
-        public long accountNumber { get; set; }
-        public long DateTime { get; set; }
-        public string AccName { get; set; }
-        public string Description { get; set; }
+        public required int id { get; set; }
+        public required string Name { get; set; }
+        public required long accountNumber { get; set; }
+        public required long DateTime { get; set; }
+        public required string AccName { get; set; }
+        public required string Description { get; set; }
     }
 }

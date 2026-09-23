@@ -1,0 +1,19 @@
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\obj\Debug\net10.0\bankingapplication.GeneratedMSBuildEditorConfig.editorconfig
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\obj\Debug\net10.0\bankingapplication.AssemblyInfoInputs.cache
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\obj\Debug\net10.0\bankingapplication.AssemblyInfo.cs
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\obj\Debug\net10.0\bankingapplication.csproj.CoreCompileInputs.cache
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\bin\Debug\net10.0\bankingapplication.exe
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\bin\Debug\net10.0\bankingapplication.deps.json
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\bin\Debug\net10.0\bankingapplication.runtimeconfig.json
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\bin\Debug\net10.0\bankingapplication.dll
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\bin\Debug\net10.0\bankingapplication.pdb
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\obj\Debug\net10.0\bankingapplication.dll
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\obj\Debug\net10.0\refint\bankingapplication.dll
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\obj\Debug\net10.0\bankingapplication.pdb
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\obj\Debug\net10.0\bankingapplication.genruntimeconfig.cache
+C:\Revature\Training\25082026---.net-fullstack-AI-enabled-Developers\P0 Banking Application\bankingapplication\obj\Debug\net10.0\ref\bankingapplication.dll
+C:\Users\Pranavmadan\AppData\Local\Temp\bankingapp_build_check\bankingapplication.exe
+C:\Users\Pranavmadan\AppData\Local\Temp\bankingapp_build_check\bankingapplication.deps.json
+C:\Users\Pranavmadan\AppData\Local\Temp\bankingapp_build_check\bankingapplication.runtimeconfig.json
+C:\Users\Pranavmadan\AppData\Local\Temp\bankingapp_build_check\bankingapplication.dll
+C:\Users\Pranavmadan\AppData\Local\Temp\bankingapp_build_check\bankingapplication.pdb
