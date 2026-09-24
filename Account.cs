@@ -2,18 +2,18 @@ namespace AccountManagement
 {
     public abstract class Account
     {
+        public int accountId { get; set; }
         public required string username { get; set; }
         protected string _password = string.Empty;
         public override int GetHashCode() => (username, _password).GetHashCode();
 
-        public string getPassword()
+        public bool verifyPassword(string password)
         {
-            string Password = _password;
-            return Password;
+            return PasswordHasher.VerifyPassword(password, _password);
         }
         public string setPassword(string newPassword)
         {
-            _password = newPassword;
+            _password = PasswordHasher.HashPassword(newPassword);
             return _password;
         }
     }

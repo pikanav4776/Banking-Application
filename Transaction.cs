@@ -2,11 +2,20 @@ namespace Transactions
 {
     public class Transaction
     {
-        public required int id { get; set; }
-        public required string Name { get; set; }
-        public required long accountNumber { get; set; }
-        public required long DateTime { get; set; }
-        public required string AccName { get; set; }
-        public required string Description { get; set; }
+        public int id { get; set; }
+        public string accName { get; set; } = string.Empty;
+        public long accountNumber { get; set; }
+        public System.DateTime DateTime { get; set; }
+        public string description { get; set; } = string.Empty;
+
+        private Transaction() { }
+
+        public Transaction(string paramAccName, long paramAccNumber, string paramDescription)
+        {
+            accName = paramAccName;
+            accountNumber = paramAccNumber;
+            description = paramDescription;
+            DateTime = System.DateTime.Now;
+        }
     }
 }

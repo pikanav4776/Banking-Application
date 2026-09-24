@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using System.Data.Common;
 using System.Formats.Asn1;
 using System.Runtime.InteropServices;
 using Checkbooks;
 using Request;
+using Transactions;
 
 namespace AccountManagement
 {
@@ -10,35 +12,39 @@ namespace AccountManagement
     {
         public long routingNumber { get; set; }
         public long accountNumber { get; set; }
-        public required string AccName { get; set; }
+        public required string accName { get; set; }
         public double accBalance { get; set; }
-        public bool IsActive { get; set; }
+        public bool isActive { get; set; }
         public required string email { get; set; }
-        public required string HomeAddress { get; set; }
-        public required string SSN { get; set; } //must be ideally encrypted
+        public required string homeAddress { get; set; }
+        public required long SSN { get; set; } //must be ideally encrypted
         public List<Checkbook>? Checkbook { get; set; }
-        public string[]? requestId { get; set; }
+        public List<ServiceRequest> serviceRequests { get; set; } = new();
+        public List<Transaction> transactions { get; set; } = new();
         public void checkAccountDetails()
         {
             Console.WriteLine($"Username:{username}");
             Console.WriteLine($"Routing Number:{routingNumber}");
             Console.WriteLine($"Account Number:{accountNumber}");
             Console.WriteLine($"Account Balance:{accBalance}"); // email
-            Console.WriteLine($"Account Activity:{IsActive}");
+            Console.WriteLine($"Account Activity:{isActive}");
             Console.WriteLine($"{username}'s email:{email}");
-            Console.WriteLine($"{username}'s address:{HomeAddress}");
-            if(Checkbook != null)
+            Console.WriteLine($"{username}'s address:{homeAddress}");
+            if(Checkbook != null && Checkbook.Count > 0)
             {
-                Console.WriteLine($"{username}'s Checkbook:{Checkbook} Be careful with this!");
+                Console.WriteLine($"{username} has {Checkbook.Count} checkbook(s) on file.");
             }
             else
             {
                 Console.WriteLine($"{username} has no checkbook on file.");
             }
 
-            if(requestId != null && requestId.Length > 0)
+            var pendingCheckbookRequests = serviceRequests
+                .Where(sr => sr.requestType == "Checkbook" && sr.accepted == null)
+                .ToList();
+            if(pendingCheckbookRequests.Count > 0)
             {
-                Console.WriteLine($"{username}'s request:{string.Join(", ", requestId)} Be careful with this!");
+                Console.WriteLine($"{username} has a pending checkbook request (Request ID: {string.Join(", ", pendingCheckbookRequests.Select(sr => sr.serviceRequestId))}).");
             }
             else
             {
@@ -58,7 +64,7 @@ namespace AccountManagement
             }
             if(flag == true)
             {
-                Console.WriteLine($"{username}'s SSN:{SSN} Be careful with this!");
+                Console.WriteLine($"{username}'s SSN:{SSN:D9} Be careful with this!");
             }
             
         }

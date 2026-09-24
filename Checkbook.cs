@@ -5,12 +5,14 @@ namespace Checkbooks
     public class Checkbook
     {
         public int checkbookId { get; set; }
-        public string Payee { get; set; }
+        public string Payee { get; set; } = string.Empty;
         public DateTime Date { get; set; }
         public long Amount { get; set; }
         public long routingNumber { get; set; }
         public long accountNumber { get; set; }
         public bool isPending;
+
+        private Checkbook() { }
 
         public Checkbook(int id, string payee, DateTime timeEntered, long amt, long rNum, long aNum )
         {
