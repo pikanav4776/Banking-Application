@@ -90,3 +90,4 @@ The tests need SQL Server Express running. They create and use a separate `Banki
 
 - Passwords are stored as a salted PBKDF2 hash, never as plain text.
 - SSNs are stored encrypted; the last 5 transactions come from the `TransactionRecords` table.
+
