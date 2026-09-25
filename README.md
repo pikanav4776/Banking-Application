@@ -20,15 +20,12 @@ xUnit                 | tests
 ```
 bankingapplication/
 │
-├── bankingapplication.Tests/   xUnit tests (run against a separate BankingAppTests database)
 ├── Migrations/                 EF Core migrations
 ├── Account.cs                  abstract base account (username + hashed password)
 ├── AdminAccount.cs
 ├── UserAccount.cs
 ├── AppConfig.cs
-├── BankingContext.cs           EF Core DbContext and model configuration
 ├── Checkbook.cs
-├── PasswordHasher.cs           PBKDF2 password hashing
 ├── Program.cs                  console menus
 ├── ServiceRequest.cs
 ├── SsnEncryptionConverter.cs   encrypts the SSN column (AES-GCM)
@@ -78,13 +75,19 @@ dotnet --version
 
    A default admin is created on first start (username `admin`, password `Admin123!`).
 
-## Tests
+## Functionality
+Users have the option to deposit/withdraw money from accounts, and transfer them to other user accounts.
+They can also request a checkbook, change their password, view their account details, and last 5 transactions.
 
-```
-dotnet test bankingapplication.Tests
-```
+Admins can create, view, and delete accounts, reset customer passwords, approve checkbook requests.
 
-The tests need SQL Server Express running. They create and use a separate `BankingAppTests` database.
+## Tables
+Accounts
+   Admin Accounts
+   User Accounts
+Checkbook
+Service Requests
+Transactions
 
 ## Notes
 

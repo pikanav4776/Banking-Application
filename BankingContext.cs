@@ -1,6 +1,7 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using AccountManagement;
 using Checkbooks;
-using Microsoft.EntityFrameworkCore;
 using Request;
 using Transactions;
 
@@ -23,7 +24,12 @@ namespace BankingData
         {
             if(!optionsBuilder.IsConfigured)
             {
-                optionsBuilder.UseSqlServer("Server=localhost\\SQLEXPRESS;Database=BankingApp;Trusted_Connection=True;TrustServerCertificate=True");
+                IConfiguration config = new ConfigurationBuilder()
+                    .SetBasePath(AppContext.BaseDirectory)
+                    .AddJsonFile("appsettings.json", optional: false)
+                    .Build();
+
+                optionsBuilder.UseSqlServer(config.GetConnectionString("BankingDb"));
             }
         }
 
@@ -48,10 +54,10 @@ namespace BankingData
                 u.Property(x => x.accountNumber).ValueGeneratedNever();
                 u.HasIndex(x => x.accountNumber).IsUnique();
                 u.Property(x => x.accName).HasMaxLength(80);
-                u.Property(x => x.email).HasMaxLength(40);
+                u.Property(x => x.email).HasMaxLength(254);
                 u.Property(x => x.homeAddress).HasMaxLength(70);
-                u.Property(x => x.accBalance).HasConversion<decimal>().HasColumnType("decimal(18,2)");
-                u.Property(x => x.SSN).HasConversion(new SsnEncryptionConverter()).HasMaxLength(100);
+                u.Property(x => x.accBalance).HasColumnType("decimal(18,2)");
+                u.Property(x => x.ssnHash).HasMaxLength(200).IsRequired();
 
                 // one UserAccount -> many Checkbooks / ServiceRequests / Transactions
                 u.HasMany(x => x.Checkbook).WithOne().HasForeignKey("userAccountId").IsRequired();
@@ -76,7 +82,7 @@ namespace BankingData
 
             modelBuilder.Entity<Transaction>(t =>
             {
-                t.HasKey(x => x.id);
+                t.HasKey(x => x.transactionId);
                 t.Property(x => x.accName).HasMaxLength(80);
                 t.Property(x => x.description).HasMaxLength(200);
             });

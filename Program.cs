@@ -1,32 +1,28 @@
-﻿using System;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
-using AccountManagement;
+﻿using AccountManagement;
 using Request;
 using Checkbooks;
-using System.IO;
-using System.Net.Mime;
 using BankingData;
 
 using System.Text.RegularExpressions;
-using System.ComponentModel.Design;
-using System.Text.Json;
-using System.Transactions;
-using System.Runtime.Serialization;
-using System.Linq;
-using System.Runtime.InteropServices.Marshalling;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Cryptography;
 using System.Text;
 
 public class Program()
 {
     public static BankingContext db = new BankingContext();
+    const decimal MaxDeposit = 1_000_000_000;
 
     #region helpermethods
-        static string ReadRequiredLine(string prompt)
+        static string ReadRequiredLine(string prompt, bool secret = false)
         {
             Console.WriteLine(prompt);
+            if(secret)
+            {
+                string censoredInput = censorInput(new StringBuilder());
+                Console.WriteLine();
+                return censoredInput;
+            }
+
             string? input = Console.ReadLine();
             while (input == null)
             {
@@ -36,71 +32,88 @@ public class Program()
             return input;
         }
 
-        const double MaxAmount = 1_000_000_000_000;
 
         // non-empty text that fits the database column
         static string ReadBoundedLine(string prompt, int maxLength)
         {
-            string input = ReadRequiredLine(prompt);
+            string input = ReadRequiredLine(prompt, false);
             while(string.IsNullOrWhiteSpace(input) || input.Length > maxLength)
             {
-                input = ReadRequiredLine($"Please enter between 1 and {maxLength} characters.");
+                input = ReadRequiredLine($"Please enter between 1 and {maxLength} characters.", false);
             }
             return input;
         }
 
-        // needs exactly one '@' with text before and after it, and no spaces
-        public static bool IsValidEmail(string email)
+        public static bool emailValidityCheck(string email)
         {
             int at = email.IndexOf('@');
-            return at > 0 && at == email.LastIndexOf('@') && at < email.Length - 1 && !email.Contains(' ');
+            int dot = email.IndexOf('.');
+            bool atCheck = at > 0 && at == email.LastIndexOf('@') && at < email.Length - 1 && !email.Contains(' ');
+            bool dotCheck = dot > at + 1 && dot == email.LastIndexOf('.') && dot < email.Length - 1 && !email.Contains(' ');
+            return atCheck && dotCheck;
         }
 
         static string ReadEmail(string prompt)
         {
-            string email = ReadBoundedLine(prompt, 40);
-            while(!IsValidEmail(email))
+            string email = ReadBoundedLine(prompt, 254);
+            while(!emailValidityCheck(email))
             {
-                email = ReadBoundedLine("Invalid email address: it must contain an '@' with text before and after it (e.g. name@example.com). Please try again:", 40);
+                email = ReadBoundedLine("Invalid email address: it must contain an '@' with text before and after it (e.g. name@example.com). Please try again:", 254);
             }
             return email;
         }
 
-        static double ReadAmount(string prompt, bool allowZero = false)
+        static decimal? ReadAmount(string prompt, decimal limit, string context, bool allowZero = false)
         {
-            string message = allowZero ? "Please enter a valid amount of zero or more." : "Please enter a valid amount greater than zero.";
             string input = ReadRequiredLine(prompt);
-            while(true)
+            if(!decimal.TryParse(input, out decimal value))
             {
-                if(double.TryParse(input, out double value) && double.IsFinite(value) && value <= MaxAmount && (allowZero ? value >= 0 : value > 0))
-                {
-                    return value;
-                }
-                input = ReadRequiredLine(message);
+                Console.WriteLine("That is not a valid number. The request has been cancelled.");
+                return null;
             }
-        }
-
-        static long ReadLong(string prompt)
-        {
-            string input = ReadRequiredLine(prompt);
-            long value;
-            while(!long.TryParse(input, out value))
+            if(value != Math.Round(value, 2))
             {
-                input = ReadRequiredLine("Please enter a whole number.");
+                Console.WriteLine("Amounts can have at most 2 decimal places. The request has been cancelled.");
+                return null;
+            }
+            if(value < 0 || (value == 0 && !allowZero))
+            {
+                Console.WriteLine($"{context} must be a positive number. The request has been cancelled.");
+                return null;
+            }
+            if(value > limit)
+            {
+                Console.WriteLine($"{context} cannot be more than {limit:F2}. The request has been cancelled.");
+                return null;
             }
             return value;
         }
 
-        public static void logTransaction(UserAccount acc, string description)
+        static long ReadLong(string prompt)
         {
-            acc.transactions.Add(new Transactions.Transaction(acc.accName, acc.accountNumber, description));
-            db.SaveChanges();
+            string input = ReadRequiredLine(prompt, false);
+            long value;
+            while(!long.TryParse(input, out value))
+            {
+                input = ReadRequiredLine("Please enter a whole number.", false);
+            }
+            return value;
         }
 
-        public static void logServiceRequest(UserAccount acc, string requestType, string description)
+        // asks for a password until it meets the rules, then sets it on the account (the caller saves)
+        static void setNewPassword(Account acc)
         {
-            acc.serviceRequests.Add(new ServiceRequest(0, acc.accountNumber, acc.username, requestType, description));
-            db.SaveChanges();
+            bool passwordSet = false;
+            while(!passwordSet)
+            {
+                Console.WriteLine("What do you want the password to be?");
+                Console.WriteLine("     Must be between 9-15 characters:");
+                Console.WriteLine("     Must contain uppercase characters");
+                Console.WriteLine("     Must contain lowercase characters");
+                Console.WriteLine("     Must contain at least 1 number");
+                string newPassword = ReadRequiredLine("     Must contain at least 1 special character; Examples:.!@#", true);
+                passwordSet = checkPassword(acc, newPassword);
+            }
         }
 
         public static bool transfer(UserAccount uAcc)
@@ -111,43 +124,40 @@ public class Program()
 
             long transferAccountNumber = ReadLong("Enter the recipient's account number:");
 
-            UserAccount? destAcc = db.UserAccounts.FirstOrDefault(account =>
-                account.username == transferAccountName &&
-                account.routingNumber == transferRoutingNumber &&
-                account.accountNumber == transferAccountNumber);
+            UserAccount? destAcc = db.UserAccounts.FirstOrDefault(account => account.username == transferAccountName &&
+            account.routingNumber == transferRoutingNumber && account.accountNumber == transferAccountNumber);
 
             if(destAcc == null)
             {
-                Console.WriteLine("No matching account found for that username, routing number, and account number. Transfer cancelled.");
+                Console.WriteLine("The account you are interested in transferring your money to either doesn't exist or you have the wrong credentials");
                 return false;
             }
-
-            if(destAcc == uAcc)
+            if(!destAcc.isActive)
             {
-                Console.WriteLine("You cannot transfer money to your own account. Transfer cancelled.");
+                Console.WriteLine("That account is inactive and can't receive transfers.");
                 return false;
             }
-
-            double transferAmount = ReadAmount("How much do you want to transfer?", allowZero: true);
-
-            if(transferAmount <= 0)
+            if(destAcc.accountNumber == uAcc.accountNumber)
             {
-                Console.WriteLine("Transfer amount must be greater than zero. Transfer cancelled.");
+                Console.WriteLine("Sorry; you can not transfer money into your own account.");
                 return false;
             }
 
-            if(transferAmount > uAcc.accBalance)
+            decimal? transferAmount = ReadAmount("How much do you want to transfer?", uAcc.accBalance, "Transfer amount");
+            if(transferAmount == null)
             {
-                Console.WriteLine("Insufficient funds for this transfer. Transfer cancelled.");
                 return false;
             }
+            decimal amount = transferAmount.Value;
 
-            uAcc.withdraw(transferAmount);
-            destAcc.deposit(transferAmount);
+            // balances and both transaction records are saved together so a transfer can't half-complete
+            uAcc.withdraw(amount);
+            destAcc.deposit(amount);
+            uAcc.transactions.Add(new Transactions.Transaction(uAcc.accName, uAcc.accountNumber, $"Transferred {amount} to {destAcc.username}"));
+            destAcc.transactions.Add(new Transactions.Transaction(destAcc.accName, destAcc.accountNumber, $"Received {amount} from {uAcc.username}"));
             db.SaveChanges();
-            logTransaction(uAcc, $"Transferred {transferAmount} to {destAcc.username}");
-            logTransaction(destAcc, $"Received {transferAmount} from {uAcc.username}");
-            Console.WriteLine($"Successfully transferred {transferAmount} to {destAcc.username}.");
+
+            Console.WriteLine($"Successfully transferred {amount} to {destAcc.username}.");
             return true;
         }
         public static void readLastFiveTransactions(string username, TextWriter? output = null)
@@ -161,12 +171,9 @@ public class Program()
             else
             {
                 // newest 5 from the database, then flipped so they print oldest to newest
-                var transactions = db.TransactionRecords
-                    .Where(t => t.accountNumber == account.accountNumber)
-                    .OrderByDescending(t => t.DateTime)
-                    .ThenByDescending(t => t.id)
-                    .Take(5)
-                    .ToList();
+                output.WriteLine("Id, Name, Account Number, Time, Action");
+                var transactions = db.TransactionRecords.Where(t => t.accountNumber == account.accountNumber).OrderByDescending(t => t.DateTime)
+                    .ThenByDescending(t => t.transactionId).Take(5).ToList();
                 transactions.Reverse();
 
                 if(transactions.Count < 5)
@@ -175,7 +182,7 @@ public class Program()
                 }
                 foreach(var transaction in transactions)
                 {
-                    output.WriteLine($"{transaction.id}, {transaction.accName}, {transaction.accountNumber}, {transaction.DateTime:s}, {transaction.description}");
+                    output.WriteLine($"{transaction.transactionId}, {transaction.accName}, {transaction.accountNumber}, {transaction.DateTime:s}, {transaction.description}");
                 }
             }
         }
@@ -197,7 +204,6 @@ public class Program()
                 if(matches.Count > 0)
                 {
                     acc.setPassword(password);
-                    Console.WriteLine("Password successfully changed!");
                     return true;
                 }
                 else
@@ -221,6 +227,31 @@ public class Program()
                 Console.WriteLine(errorMessage.TrimEnd());
                 return false;
             }
+        }
+        public static string censorInput(StringBuilder password)
+        {
+            while (true)
+            {
+                ConsoleKeyInfo key = Console.ReadKey(true);
+                if (key.Key == ConsoleKey.Enter)
+                {
+                    break;
+                }
+                else if (key.Key == ConsoleKey.Backspace)
+                {
+                    if (password.Length > 0)
+                    {
+                        password.Remove(password.Length - 1, 1);
+                        Console.Write("\b \b");
+                    }
+                }
+                else if (key.KeyChar != '\u0000') 
+                {
+                    password.Append(key.KeyChar);
+                    Console.Write("*"); 
+                }
+            }
+            return password.ToString();
         }
     #endregion
     public static void requestCheckbook(UserAccount acc)
@@ -248,9 +279,12 @@ public class Program()
         Console.WriteLine("     Must contain lowercase characters");
         Console.WriteLine("     Must contain at least 1 number");
 
-        string newPassword = ReadRequiredLine("     Must contain at least 1 special character; Examples:.!@#");
-        checkPassword(acc, newPassword);
-        db.SaveChanges();
+        string newPassword = ReadRequiredLine("     Must contain at least 1 special character; Examples:.!@#", true);
+        if(checkPassword(acc, newPassword))
+        {
+            db.SaveChanges();
+            Console.WriteLine("Password successfully changed!");
+        }
     }
 
     public static void customer_options(UserAccount acc)
@@ -278,32 +312,29 @@ public class Program()
                     acc.checkAccountDetails();
                     break;
                 case 2:
-                    double withdrawAmount = ReadAmount("How much do you want to withdraw?");
-                    if(withdrawAmount > acc.accBalance)
+                    decimal? withdrawAmount = ReadAmount("How much do you want to withdraw?", acc.accBalance, "Withdrawal amount");
+                    if(withdrawAmount == null)
                     {
-                        Console.WriteLine("Insufficient funds for this withdrawal.");
                         break;
                     }
-                    acc.withdraw(withdrawAmount);
+                    acc.withdraw(withdrawAmount.Value);
+                    acc.transactions.Add(new Transactions.Transaction(acc.accName, acc.accountNumber, $"Withdrew {withdrawAmount.Value}"));
                     db.SaveChanges();
-                    logTransaction(acc, $"Withdrew {withdrawAmount}");
-                    logServiceRequest(acc, "withdraw", $"{acc.username} withdrew {withdrawAmount} dollars");
                     Console.WriteLine($"Withdrawal successful. New balance: {acc.accBalance}");
                     break;
                 case 3:
-                    double depositAmount = ReadAmount("How much do you want to deposit?");
-                    acc.deposit(depositAmount);
+                    decimal? depositAmount = ReadAmount("How much do you want to deposit?", MaxDeposit,"Deposit amount");
+                    if(depositAmount == null)
+                    {
+                        break;
+                    }
+                    acc.deposit(depositAmount.Value);
+                    acc.transactions.Add(new Transactions.Transaction(acc.accName, acc.accountNumber, $"Deposited {depositAmount.Value}"));
                     db.SaveChanges();
-                    logTransaction(acc, $"Deposited {depositAmount}");
-                    logServiceRequest(acc, "deposit", $"{acc.username} deposited {depositAmount} dollars");
                     Console.WriteLine($"Deposit successful. New balance: {acc.accBalance}");
                     break;
                 case 4:
-                    bool transferSucceeded = transfer(acc);
-                    if(transferSucceeded)
-                    {
-                        logServiceRequest(acc, "transfer", $"{acc.username} completed a transfer");
-                    }
+                    transfer(acc);
                     break;
                 case 5:
                     readLastFiveTransactions(acc.username);
@@ -315,7 +346,7 @@ public class Program()
                     passwordChange(acc);
                     break;
                 case 8:
-                    Console.WriteLine("Logging out...");
+                    Console.WriteLine("Thank you for banking with us today!");
                     break;
                 default:
                     Console.WriteLine("Please enter a valid option (1-8).");
@@ -330,7 +361,7 @@ public class Program()
         {
             Console.WriteLine("Admin Options:");
             Console.WriteLine("1:   Create new Account");
-            Console.WriteLine("2:   Delete an existing account");
+            Console.WriteLine("2:   Close an existing account");
             Console.WriteLine("3:   Change an Account");
             Console.WriteLine("4:   View an Account");
             Console.WriteLine("5:   Reset Customer Password");
@@ -338,35 +369,48 @@ public class Program()
             Console.WriteLine("7:   Log Out");
             while(!int.TryParse(Console.ReadLine(), out options))
             {
-                Console.WriteLine("Please enter a valid numeric option.");
+                Console.WriteLine("Please enter a number between 1-7");
             }
             switch(options){
                 case 1:
                     Console.WriteLine("Creating new Account");
-                    string accType = ReadRequiredLine("Do you want to create a user account or admin account");
+                    string accType = ReadRequiredLine("Do you want to create a user account or admin account",false);
                     if(accType.ToLower() == "user")
                     {
-                        long routingNumber = Random.Shared.Next(0, 1000000000);
+                        long routingNumber = db.UserAccounts.Select(u => u.routingNumber).FirstOrDefault();
+                        if(routingNumber == 0)
+                        {
+                            routingNumber = 123456789;
+                        }
                         long accountNumber;
-                        do { accountNumber = Random.Shared.Next(0, 1000000000); } while(db.UserAccounts.Any(u => u.accountNumber == accountNumber));
+                        do
+                        {
+                            accountNumber = Random.Shared.NextInt64(1_000_000_000, 10_000_000_000);
+                        }
+                        while(db.UserAccounts.Any(u => u.accountNumber == accountNumber));
                         string AccName = ReadBoundedLine("What do you want your username to be?", 25);
                         while(db.Accounts.Any(a => a.username == AccName))
                         {
-                            AccName = ReadBoundedLine("That username is already taken. Choose another username:", 25);
+                            AccName = ReadBoundedLine($"{AccName} is already taken. Choose another username:", 25);
                         }
 
-                        double accBalance = ReadAmount("What amount would you like to initially deposit?", allowZero: true);
+                        decimal? initialDeposit = ReadAmount("What amount would you like to initially deposit?", MaxDeposit,"Initial deposit", allowZero: true);
+                        if(initialDeposit == null)
+                        {
+                            Console.WriteLine("Account creation cancelled.");
+                            break;
+                        }
+                        decimal accBalance = initialDeposit.Value;
 
                         bool isActive = true;
                         string email = ReadEmail("What is your email address?");
 
-                        string HomeAddress = ReadBoundedLine("What is your address?", 70);
-                        string ssnInput = ReadRequiredLine("What is your SSN? (9 digits)");
+                        string HomeAddress = ReadBoundedLine("What is your address? (e.g. 1234 Street Name, City, State, Zip code)", 70);
+                        string ssnInput = ReadRequiredLine("What is your SSN? (9 digits)", true);
                         while(!Regex.IsMatch(ssnInput, "^[0-9]{9}$"))
                         {
-                            ssnInput = ReadRequiredLine("SSN must be exactly 9 digits. What is your SSN?");
+                            ssnInput = ReadRequiredLine("SSN must be exactly 9 digits. What is your SSN?", true);
                         }
-                        long SSN = long.Parse(ssnInput);
                         UserAccount newUser = new UserAccount
                         {
                             username = AccName,
@@ -376,25 +420,14 @@ public class Program()
                             accBalance = accBalance,
                             isActive = isActive,
                             email = email,
-                            homeAddress = HomeAddress,
-                            SSN = SSN
+                            homeAddress = HomeAddress
                         };
-
-                        bool userPasswordSet = false;
-                        while(!userPasswordSet)
-                        {
-                            Console.WriteLine("What do you want your password to be?");
-                            Console.WriteLine("     Must be between 9-15 characters:");
-                            Console.WriteLine("     Must contain uppercase characters");
-                            Console.WriteLine("     Must contain lowercase characters");
-                            Console.WriteLine("     Must contain at least 1 number");
-                            string newUserPassword = ReadRequiredLine("     Must contain at least 1 special character; Examples:.!@#");
-                            userPasswordSet = checkPassword(newUser, newUserPassword);
-                        }
+                        newUser.setSsn(ssnInput);
+                        setNewPassword(newUser);
 
                         db.UserAccounts.Add(newUser);
                         db.SaveChanges();
-                            Console.WriteLine($"Account successfully created for {newUser.username}. Account Number: {newUser.accountNumber}");
+                        Console.WriteLine($"Account successfully created for {newUser.username}. Account Number: {newUser.accountNumber}");
                     }
                     else if(accType.ToLower() == "admin")
                     {
@@ -409,17 +442,7 @@ public class Program()
                             username = adminUsername
                         };
 
-                        bool adminPasswordSet = false;
-                        while(!adminPasswordSet)
-                        {
-                            Console.WriteLine("What do you want your password to be?");
-                            Console.WriteLine("     Must be between 9-15 characters:");
-                            Console.WriteLine("     Must contain uppercase characters");
-                            Console.WriteLine("     Must contain lowercase characters");
-                            Console.WriteLine("     Must contain at least 1 number");
-                            string newAdminPassword = ReadRequiredLine("     Must contain at least 1 special character; Examples:.!@#");
-                            adminPasswordSet = checkPassword(newAdmin, newAdminPassword);
-                        }
+                        setNewPassword(newAdmin);
 
                         db.AdminAccounts.Add(newAdmin);
                         db.SaveChanges();
@@ -431,13 +454,14 @@ public class Program()
                     }
                     break;
                 case 2:
-                    string accName = ReadRequiredLine("Whose account do you want to delete");
-                    UserAccount? accToDelete = db.UserAccounts.FirstOrDefault(ua => ua.username == accName);
-                    if(accToDelete != null)
+                    string accName = ReadRequiredLine("Whose account do you want to close?", false);
+                    UserAccount? accToClose = db.UserAccounts.FirstOrDefault(ua => ua.username == accName);
+                    if(accToClose != null)
                     {
-                        db.UserAccounts.Remove(accToDelete);
+                        // deactivated rather than removed so its transactions and requests stay on record
+                        accToClose.isActive = false;
                         db.SaveChanges();
-                        Console.WriteLine($"Account for {accName} has been deleted.");
+                        Console.WriteLine($"Account for {accName} has been closed (deactivated) and can no longer log in.");
                     }
                     else
                     {
@@ -445,7 +469,7 @@ public class Program()
                     }
                     break;
                 case 3:
-                    string accNameToBeChanged = ReadRequiredLine("Whose account do you want to change?");
+                    string accNameToBeChanged = ReadRequiredLine("Whose account do you want to change?",false);
                     UserAccount? accToBeEdited = db.UserAccounts.FirstOrDefault(ua => ua.username == accNameToBeChanged);
                     if(accToBeEdited == null)
                     {
@@ -454,11 +478,11 @@ public class Program()
                     }
                     else
                     {
-                        string details = ReadRequiredLine("What details do you want to alter?");
+                        string details = ReadRequiredLine("What details do you want to alter?",false);
                         switch (details)
                         {
                             case "AccName":
-                                accToBeEdited.accName = ReadBoundedLine($"What is {accToBeEdited.username}", 80);
+                                accToBeEdited.accName = ReadBoundedLine($"What is {accToBeEdited.username}'s new account name?", 80);
                                 break;
                             case "activity":
                                 accToBeEdited.isActive = !accToBeEdited.isActive;
@@ -475,7 +499,7 @@ public class Program()
                         break;
                     }
                 case 4:
-                    string accNameToView = ReadRequiredLine("Whose account do you want to view?");
+                    string accNameToView = ReadRequiredLine("Whose account do you want to view?",false);
                     UserAccount? accToView = db.UserAccounts.Include(u => u.Checkbook).Include(u => u.serviceRequests).FirstOrDefault(ua => ua.username == accNameToView);
                     if(accToView == null)
                     {
@@ -485,7 +509,7 @@ public class Program()
                     accToView.checkAccountDetails();
                     break;
                 case 5:
-                    string accNamePswdReset = ReadRequiredLine("Resetting Customer Password");
+                    string accNamePswdReset = ReadRequiredLine("Resetting Customer Password. Whose password do you want to reset?");
                     UserAccount? accPswdReset = db.UserAccounts.FirstOrDefault(ua => ua.username == accNamePswdReset);
                     if(accPswdReset == null)
                     {
@@ -495,7 +519,7 @@ public class Program()
                     passwordChange(accPswdReset);
                     break;
                 case 6:
-                    string accCheckbookName = ReadRequiredLine("Approve Checkbook Request");
+                    string accCheckbookName = ReadRequiredLine("Approve Checkbook Request",false);
                     UserAccount? accCheckbook = db.UserAccounts.FirstOrDefault(ua => ua.username == accCheckbookName);
                     if(accCheckbook == null)
                     {
@@ -512,7 +536,6 @@ public class Program()
                         break;
                     }
                     pendingCheckbookRequest.approve();
-                    accCheckbook.Checkbook ??= new List<Checkbook>();
                     accCheckbook.Checkbook.Add(new Checkbook(0, "", DateTime.Now, 0, accCheckbook.routingNumber, accCheckbook.accountNumber));
                     // isPending unused for now
                     db.SaveChanges();
@@ -529,14 +552,6 @@ public class Program()
     }
     static void Main(string[] args)
     {
-        if(string.IsNullOrEmpty(Environment.GetEnvironmentVariable("BANKING_SSN_KEY")))
-        {
-            Console.WriteLine("BANKING_SSN_KEY is not set, so SSNs can't be encrypted.");
-            Console.WriteLine("Set it, then close and reopen your terminal (and VS Code) and start again:");
-            Console.WriteLine("    setx BANKING_SSN_KEY \"a-long-random-secret\"");
-            return;
-        }
-
         if(!db.Database.CanConnect())
         {
             Console.WriteLine("Can't reach the BankingApp database. Make sure SQL Server Express is running,");
@@ -544,13 +559,14 @@ public class Program()
             return;
         }
 
-        if(!db.AdminAccounts.Any(a => a.username == "admin"))
+        if(!db.AdminAccounts.Any())
         {
-            AdminAccount defaultAdmin = new AdminAccount { username = "admin" };
-            defaultAdmin.setPassword("Admin123!");
-            db.AdminAccounts.Add(defaultAdmin);
+            Console.WriteLine("No admin account exists yet. Let's create the first one.");
+            AdminAccount firstAdmin = new AdminAccount { username = ReadBoundedLine("What do you want the admin username to be?", 25) };
+            setNewPassword(firstAdmin);
+            db.AdminAccounts.Add(firstAdmin);
             db.SaveChanges();
-            Console.WriteLine("Default admin account created - username: admin / password: Admin123!");
+            Console.WriteLine($"Admin account created for {firstAdmin.username}.");
         }
 
         int option = 0;
@@ -569,10 +585,10 @@ public class Program()
             switch (option)
             {
                 case 1:
-                    string custUsername = ReadRequiredLine("Please Enter your username");
-                    string custPassword = ReadRequiredLine("Please Enter your password");
-                    UserAccount? uAcc = db.UserAccounts.Include(u => u.Checkbook).Include(u => u.serviceRequests).FirstOrDefault(u => u.username == custUsername);
-                    if(uAcc == null || !uAcc.verifyPassword(custPassword))
+                    string userUsername = ReadRequiredLine("Please enter your username", false);
+                    string userPassword = ReadRequiredLine("Please enter your password", true);
+                    UserAccount? uAcc = db.UserAccounts.Include(u => u.Checkbook).Include(u => u.serviceRequests).FirstOrDefault(u => u.username == userUsername);
+                    if(uAcc == null || !uAcc.verifyPassword(userPassword))
                     {
                         Console.WriteLine("Invalid Credentials");
                         break;
@@ -585,8 +601,8 @@ public class Program()
                     customer_options(uAcc);
                     break;
                 case 2:
-                    string adminUsername = ReadRequiredLine("Please Enter your username");
-                    string adminPassword = ReadRequiredLine("Please Enter your password");
+                    string adminUsername = ReadRequiredLine("Please enter your username", false);
+                    string adminPassword = ReadRequiredLine("Please enter your password", true);
                     AdminAccount? aAcc = db.AdminAccounts.FirstOrDefault(a => a.username == adminUsername);
                     if(aAcc == null || !aAcc.verifyPassword(adminPassword))
                     {
@@ -596,9 +612,10 @@ public class Program()
                     admin_options(aAcc);
                     break;
                 case 3:
+                    Console.WriteLine("Thank you for using this application!");
                     break;
                 default:
-                    Console.WriteLine("Please let us know what value you want");
+                    Console.WriteLine("Please indicate whether you want to access this tool as a customer or admin by typing 1 or 2, respectively.");
                     break;
             }
         }

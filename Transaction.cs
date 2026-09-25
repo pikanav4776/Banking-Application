@@ -2,7 +2,7 @@ namespace Transactions
 {
     public class Transaction
     {
-        public int id { get; set; }
+        public int transactionId { get; set; }
         public string accName { get; set; } = string.Empty;
         public long accountNumber { get; set; }
         public System.DateTime DateTime { get; set; }
