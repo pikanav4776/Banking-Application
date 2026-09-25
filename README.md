@@ -13,7 +13,6 @@ C#                    | programming language
 .NET 10               | application framework
 Entity Framework Core | ORM, code-first migrations
 SQL Server            | relational database
-xUnit                 | tests
 
 ## Project Structure
 
@@ -25,11 +24,11 @@ bankingapplication/
 ├── AdminAccount.cs
 ├── UserAccount.cs
 ├── AppConfig.cs
+├── ERD.png
 ├── Checkbook.cs
 ├── Program.cs                  console menus
 ├── ServiceRequest.cs
 ├── SsnEncryptionConverter.cs   encrypts the SSN column (AES-GCM)
-├── Tables.sql                  original hand-written schema, superseded by Migrations/
 └── Transaction.cs
 ```
 
@@ -83,18 +82,24 @@ Admins can create, view, and delete accounts, reset customer passwords, approve 
 
 ## Tables
 Accounts
+
    Admin Accounts
+
    User Accounts
+
 Checkbook
+
 Service Requests
+
 Transactions
 
 ## Database Diagram
 ![Banking database ERD](ERD.png)
 
-
 ## Notes
 
-- Passwords are stored as a salted PBKDF2 hash, never as plain text.
+- Passwords are stored as a salted PBKDF2 hash, never as plain text. They are also censored.
+- This program invokes OOP principles; the classes are abstracted, the methods are encapsulations, and the user/admin account classes are an extension of the account class(inheritance).
+- This program uses code-first approach.
 - SSNs are stored encrypted; the last 5 transactions come from the `TransactionRecords` table.
 
