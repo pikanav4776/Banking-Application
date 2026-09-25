@@ -89,6 +89,10 @@ Checkbook
 Service Requests
 Transactions
 
+## Database Diagram
+![Banking database ERD](ERD.png)
+
+
 ## Notes
 
 - Passwords are stored as a salted PBKDF2 hash, never as plain text.
